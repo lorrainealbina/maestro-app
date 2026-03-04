@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0A0A0F" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Maestro" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
+  <meta name="description" content="Organize sua prática musical com cronômetro, registro de repertório e agenda de estudos." />
+  <title>Maestro — Diário de Estudos Musical</title>
+
+  <!-- React + Babel (no build needed) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- PWA manifest inline -->
+  <script>
+    // Register service worker for PWA
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js").catch(() => {});
+      });
+    }
+  </script>
+
+  <style>
+    body { margin: 0; padding: 0; background: #0A0A0F; }
+    #root { min-height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+
+// ─── ICONS ────────────────────────────────────────────────────────────────────
+const Icon = ({ d, size = 20, stroke = "currentColor", fill = "none", strokeWidth = 1.8 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+    <path d={d} />
+  </svg>
+);
+
+const icons = {
+  music: "M9 18V5l12-2v13M9 18c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-2c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z",
+  timer: "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM12 6v6l4 2",
+  dumbbell: "M6.5 6.5h11M6.5 17.5h11M3 9.5h3M3 14.5h3M18 9.5h3M18 14.5h3M6 6.5v11M18 6.5v11",
+  book: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15z",
+  calendar: "M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6zM8 2v4M16 2v4M3 10h18",
+  check: "M20 6 9 17l-5-5",
+  plus: "M12 5v14M5 12h14",
+  flame: "M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z",
+  star: "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z",
+  bell: "M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0",
+  link: "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71",
+  trash: "M3 6h18M19 6l-1 14H6L5 6M9 6V4h6v2",
+  edit: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z",
+  save: "M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8",
+  chevronRight: "M9 18l6-6-6-6",
+  chevronLeft: "M15 18l-6-6 6-6",
+  x: "M18 6 6 18M6 6l12 12",
+  play: "M5 3l14 9-14 9V3z",
+  pause: "M6 4h4v16H6zM14 4h4v16h-4z",
+  skip: "M5 4l10 8-10 8V4zM19 5v14",
+  refresh: "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15",
+  shield: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+  user: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+  lock: "M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2zM7 11V7a5 5 0 0 1 10 0v4",
+  eye: "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 12m-3 0a3 3 0 1 0 6 0 3 3 0 0 0-6 0",
+  mail: "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 6l-10 7L2 6",
+  info: "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM12 16v-4M12 8h.01",
+};
+
+// ─── THEME / CONFIG ───────────────────────────────────────────────────────────
+const PHASE_CONFIG = {
+  warmup:    { key: "warmup",    label: "Aquecimento",     color: "#F59E0B", bg: "#78350F", pct: 15 },
+  technique: { key: "technique", label: "Técnica",         color: "#34D399", bg: "#064E3B", pct: 35 },
+  repertoire:{ key: "repertoire",label: "Repertório",      color: "#818CF8", bg: "#1E1B4B", pct: 50 },
+};
+
+const DAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const MONTHS = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+function fmt(s) {
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
+  return `${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
+}
+
+function today() {
+  return new Date().toISOString().split("T")[0];
+}
+
+function weekKey() {
+  const d = new Date(), day = d.getDay();
+  const mon = new Date(d); mon.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+  return mon.toISOString().split("T")[0];
+}
+
+// ─── STORAGE ──────────────────────────────────────────────────────────────────
+function load(key, def) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch { return def; } }
+function save(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MAIN APP
+// ═══════════════════════════════════════════════════════════════════════════════
+function MusicDiary() {
+  const [tab, setTab] = useState("home"); // home | session | calendar | history
+  const [sessionPhase, setSessionPhase] = useState(null); // null | setup | warmup | technique | repertoire | done
+  const [totalMin, setTotalMin] = useState(60);
+  const [pcts, setPcts] = useState({ warmup: 15, technique: 35, repertoire: 50 });
+  const [log, setLog] = useState(() => load("mdiary_log", {}));
+  const [plans, setPlans] = useState(() => load("mdiary_plans", {}));
+  const [calDate, setCalDate] = useState(new Date());
+  const [streak, setStreak] = useState(() => load("mdiary_streak", { days: [], lastComplete: null }));
+  const [toast, setToast] = useState(null);
+
+  // persist
+  useEffect(() => { save("mdiary_log", log); }, [log]);
+  useEffect(() => { save("mdiary_plans", plans); }, [plans]);
+  useEffect(() => { save("mdiary_streak", streak); }, [streak]);
+
+  function showToast(msg, type = "success") {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3200);
+  }
+
+  function completeSession(data) {
+    const key = today();
+    const newLog = { ...log, [key]: { ...data, date: key, ts: Date.now() } };
+    setLog(newLog);
+    const days = streak.days.includes(key) ? streak.days : [...streak.days, key];
+    setStreak({ days, lastComplete: key });
+    setSessionPhase("done");
+    showToast("Sessão registrada! 🎵");
+  }
+
+  const phases = Object.entries(PHASE_CONFIG).map(([k, cfg]) => ({
+    ...cfg, minutes: Math.round(totalMin * pcts[k] / 100), seconds: Math.round(totalMin * 60 * pcts[k] / 100)
+  }));
+
+  const thisWeekDays = (() => {
+    const d = new Date(), day = d.getDay();
+    const mon = new Date(d); mon.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+    return Array.from({ length: 7 }, (_, i) => {
+      const dd = new Date(mon); dd.setDate(mon.getDate() + i);
+      return dd.toISOString().split("T")[0];
+    });
+  })();
+
+  return (
+    <div style={{ fontFamily: "'Crimson Pro', Georgia, serif", background: "#0A0A0F", minHeight: "100vh", color: "#E8E3DB", display: "flex", flexDirection: "column", maxWidth: 480, margin: "0 auto", position: "relative", overflow: "hidden" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Space+Mono:wght@400;700&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+        input, textarea, select { outline: none; font-family: inherit; }
+        button { cursor: pointer; font-family: inherit; border: none; }
+        .tab-btn { transition: all .2s; }
+        .tab-btn:hover { opacity: .8; }
+        .card { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); border-radius: 16px; padding: 20px; }
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+        .fade-in { animation: fadeIn .4s ease; }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+        .ring-anim { animation: ringPop .6s ease; }
+        @keyframes ringPop { 0%{transform:scale(1)} 50%{transform:scale(1.08)} 100%{transform:scale(1)} }
+      `}</style>
+
+      {/* TOAST */}
+      {toast && (
+        <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 999, background: toast.type === "success" ? "#065F46" : "#7F1D1D", border: `1px solid ${toast.type === "success" ? "#34D399" : "#EF4444"}`, color: "#fff", padding: "10px 20px", borderRadius: 40, fontSize: 14, fontFamily: "'Space Mono', monospace", whiteSpace: "nowrap" }}>
+          {toast.msg}
+        </div>
+      )}
+
+      {/* HEADER */}
+      <header style={{ padding: "24px 24px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div>
+          <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: "#6B6B7B", letterSpacing: 3, textTransform: "uppercase" }}>Diário Musical</div>
+          <h1 style={{ fontSize: 22, fontWeight: 300, letterSpacing: -0.5, marginTop: 2 }}>Maestro<span style={{ color: "#F59E0B" }}>.</span></h1>
+        </div>
+        {/* Week streak dots */}
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {thisWeekDays.map((d, i) => {
+            const done = streak.days.includes(d);
+            const isToday = d === today();
+            return (
+              <div key={i} title={DAYS[i === 6 ? 0 : i + 1]} style={{ width: 10, height: 10, borderRadius: "50%", background: done ? "#F59E0B" : isToday ? "rgba(245,158,11,.3)" : "rgba(255,255,255,.1)", border: isToday ? "1.5px solid #F59E0B" : "none", transition: "all .3s" }} />
+            );
+          })}
+        </div>
+      </header>
+
+      {/* CONTENT */}
+      <main style={{ flex: 1, overflowY: "auto", padding: "20px 24px 100px" }}>
+        {tab === "home" && <HomeTab phases={phases} totalMin={totalMin} setTotalMin={setTotalMin} pcts={pcts} setPcts={setPcts} streak={streak} onStart={() => { setSessionPhase("setup"); setTab("session"); }} log={log} plans={plans} />}
+        {tab === "session" && <SessionTab phases={phases} phase={sessionPhase} setPhase={setSessionPhase} onComplete={completeSession} onBack={() => { setTab("home"); setSessionPhase(null); }} showToast={showToast} plans={plans} todayKey={today()} />}
+        {tab === "calendar" && <CalendarTab plans={plans} setPlans={setPlans} calDate={calDate} setCalDate={setCalDate} showToast={showToast} log={log} streak={streak} />}
+        {tab === "history" && <HistoryTab log={log} streak={streak} />}
+        {tab === "privacy" && <PrivacyTab />}
+      </main>
+
+      {/* BOTTOM NAV */}
+      <nav style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: "rgba(10,10,15,.95)", backdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,.07)", display: "grid", gridTemplateColumns: "repeat(5,1fr)", padding: "12px 0 20px" }}>
+        {[
+          { id: "home",     label: "Início",   icon: icons.music },
+          { id: "session",  label: "Sessão",   icon: icons.timer },
+          { id: "calendar", label: "Agenda",   icon: icons.calendar },
+          { id: "history",  label: "Histórico",icon: icons.flame },
+          { id: "privacy",  label: "Privac.",  icon: icons.shield },
+        ].map(n => (
+          <button key={n.id} className="tab-btn" onClick={() => { setTab(n.id); if (n.id === "session" && !sessionPhase) setSessionPhase("setup"); }} style={{ background: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, color: tab === n.id ? "#F59E0B" : "#6B6B7B", transition: "color .2s" }}>
+            <Icon d={n.icon} size={22} stroke="currentColor" strokeWidth={tab === n.id ? 2 : 1.5} />
+            <span style={{ fontSize: 10, fontFamily: "'Space Mono',monospace", letterSpacing: 1 }}>{n.label}</span>
+          </button>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HOME TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+function HomeTab({ phases, totalMin, setTotalMin, pcts, setPcts, streak, onStart, log, plans }) {
+  const [editPct, setEditPct] = useState(false);
+  const [localPcts, setLocalPcts] = useState(pcts);
+  const total = Object.values(localPcts).reduce((a, b) => a + b, 0);
+
+  function applyPcts() {
+    if (total !== 100) return;
+    setPcts(localPcts); setEditPct(false);
+  }
+
+  const todayPlan = plans[today()];
+  const weekDone = streak.days.filter(d => { const dd = new Date(d), now = new Date(); return Math.abs(dd - now) < 7 * 864e5; }).length;
+
+  return (
+    <div className="fade-in">
+      {/* Greeting */}
+      <div style={{ marginBottom: 28 }}>
+        <p style={{ fontSize: 13, color: "#6B6B7B", fontFamily: "'Space Mono',monospace" }}>{new Date().toLocaleDateString("pt-BR", { weekday:"long", day:"numeric", month:"long" })}</p>
+        <h2 style={{ fontSize: 28, fontWeight: 300, marginTop: 6 }}>Pronto para <em>praticar?</em></h2>
+      </div>
+
+      {/* Streak card */}
+      <div className="card" style={{ marginBottom: 16, background: "linear-gradient(135deg, rgba(245,158,11,.12), rgba(245,158,11,.04))", borderColor: "rgba(245,158,11,.2)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontSize: 11, fontFamily: "'Space Mono',monospace", color: "#F59E0B", letterSpacing: 2, textTransform: "uppercase" }}>Sequência semanal</div>
+            <div style={{ fontSize: 42, fontWeight: 300, lineHeight: 1.1, marginTop: 4 }}>{weekDone}<span style={{ fontSize: 18, color: "#9CA3AF" }}>/7</span></div>
+          </div>
+          <div style={{ fontSize: 40 }}>🔥</div>
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          {["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"].map((d, i) => {
+            const today = new Date(), day = today.getDay();
+            const mon = new Date(today); mon.setDate(today.getDate() - (day === 0 ? 6 : day - 1));
+            const dd = new Date(mon); dd.setDate(mon.getDate() + i);
+            const key = dd.toISOString().split("T")[0];
+            const done = streak.days.includes(key);
+            return (
+              <div key={i} style={{ flex: 1, textAlign: "center" }}>
+                <div style={{ fontSize: 9, fontFamily: "'Space Mono',monospace", color: "#6B6B7B", marginBottom: 4 }}>{d}</div>
+                <div style={{ height: 6, borderRadius: 3, background: done ? "#F59E0B" : "rgba(255,255,255,.1)" }} />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Today's plan */}
+      {todayPlan && (
+        <div className="card" style={{ marginBottom: 16, borderColor: "rgba(129,140,248,.2)" }}>
+          <div style={{ fontSize: 11, fontFamily: "'Space Mono',monospace", color: "#818CF8", letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>Plano de hoje</div>
+          <p style={{ fontSize: 15, color: "#C4C0BA" }}>{todayPlan.note}</p>
+        </div>
+      )}
+
+      {/* Time selector */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 11, fontFamily: "'Space Mono',monospace", color: "#6B6B7B", letterSpacing: 2, textTransform: "uppercase", marginBottom: 16 }}>Tempo de estudo</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {[15, 30, 45, 60, 90, 120].map(m => (
+            <button key={m} onClick={() => setTotalMin(m)} style={{ padding: "8px 16px", borderRadius: 20, background: totalMin === m ? "#F59E0B" : "rgba(255,255,255,.06)", color: totalMin === m ? "#000" : "#9CA3AF", fontSize: 13, fontFamily: "'Space Mono',monospace", fontWeight: totalMin === m ? 700 : 400, border: "1px solid " + (totalMin === m ? "#F59E0B" : "rgba(255,255,255,.08)"), transition: "all .2s" }}>
+              {m >= 60 ? `${m / 60}h` : `${m}min`}
+            </button>
+          ))}
+        </div>
+        {/* Custom time */}
+        <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
+          <input type="number" min={5} max={480} value={totalMin} onChange={e => setTotalMin(Number(e.target.value))} style={{ width: 70, background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "6px 10px", color: "#E8E3DB", fontSize: 14, fontFamily: "'Space Mono',monospace" }} />
+          <span style={{ fontSize: 13, color: "#6B6B7B" }}>minutos personalizados</span>
+        </div>
+      </div>
+
+      {/* Phase breakdown */}
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontFamily: "'Space Mono',monospace", color: "#6B6B7B", letterSpacing: 2, textTransform: "uppercase" }}>Divisão do estudo</div>
+          <button onClick={() => { setEditPct(!editPct); setLocalPcts(pcts); }} style={{ background: "none", color: "#818CF8", fontSize: 12, fontFamily: "'Space Mono',monospace", display: "flex", alignItems: "center", gap: 4 }}>
+            <Icon d={icons.edit} size={13} /> {editPct ? "cancelar" : "editar"}
+          </button>
+        </div>
+        <div style={{ display: "flex", height: 8, borderRadius: 4, overflow: "hidden", marginBottom: 16, gap: 2 }}>
+          {phases.map(p => <div key={p.key} style={{ width: `${pcts[p.key]}%`, background: p.color, transition: "width .4s" }} />)}
+        </div>
+        {phases.map(p => (
+          <div key={p.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: p.color, flexShrink: 0 }} />
+              <span style={{ fontSize: 15 }}>{p.label}</span>
+            </div>
+            {editPct ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input type="number" min={0} max={100} value={localPcts[p.key]} onChange={e => setLocalPcts(prev => ({ ...prev, [p.key]: Number(e.target.value) }))} style={{ width: 52, background: "rgba(255,255,255,.08)", border: `1px solid ${p.color}40`, borderRadius: 6, padding: "4px 8px", color: "#E8E3DB", fontSize: 13, fontFamily: "'Space Mono',monospace", textAlign: "center" }} />
+                <span style={{ fontSize: 12, color: "#6B6B7B" }}>%</span>
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                <span style={{ fontFamily: "'Space Mono',monospace", fontSize: 12, color: p.color }}>{pcts[p.key]}%</span>
+                <span style={{ fontFamily: "'Space Mono',monospace", fontSize: 13, color: "#9CA3AF" }}>{p.minutes}min</span>
+              </div>
+            )}
+          </div>
+        ))}
+        {editPct && (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 12, color: total === 100 ? "#34D399" : "#EF4444", fontFamily: "'Space Mono',monospace", marginBottom: 8 }}>Total: {total}% {total !== 100 && "(deve ser 100%)"}</div>
+            <button onClick={applyPcts} disabled={total !== 100} style={{ width: "100%", padding: "10px", borderRadius: 10, background: total === 100 ? "#F59E0B" : "rgba(255,255,255,.06)", color: total === 100 ? "#000" : "#6B6B7B", fontSize: 13, fontFamily: "'Space Mono',monospace", fontWeight: 700, transition: "all .2s" }}>
+              Aplicar
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Start button */}
+      <button onClick={onStart} style={{ width: "100%", padding: "16px", borderRadius: 16, background: "linear-gradient(135deg, #F59E0B, #D97706)", color: "#000", fontSize: 17, fontWeight: 600, letterSpacing: 0.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 8px 32px rgba(245,158,11,.3)", transition: "transform .15s, box-shadow .15s" }}
+        onMouseDown={e => e.currentTarget.style.transform = "scale(.98)"}
+        onMouseUp={e => e.currentTarget.style.transform = "scale(1)"}>
+        <Icon d={icons.play} size={18} fill="#000" stroke="#000" />
+        Iniciar Sessão · {totalMin >= 60 ? `${Math.floor(totalMin / 60)}h${totalMin % 60 > 0 ? (totalMin % 60) + "min" : ""}` : `${totalMin}min`}
+      </button>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SESSION TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+function SessionTab({ phases, phase, setPhase, onComplete, onBack, showToast, plans, todayKey }) {
+  const warmup = phases.find(p => p.key === "warmup");
+  const technique = phases.find(p => p.key === "technique");
+  const repertoire = phases.find(p => p.key === "repertoire");
+
+  if (phase === "setup" || !phase) return <SetupPrompt phases={phases} onStart={() => setPhase("warmup")} onBack={onBack} />;
+  if (phase === "warmup")    return <WarmupPhase phase={warmup} onDone={() => setPhase("technique")} />;
+  if (phase === "technique") return <TechniquePhase phase={technique} onDone={(data) => setPhase({ name: "repertoire", techData: data })} showToast={showToast} />;
+  if (phase === "repertoire" || (phase && phase.name === "repertoire")) return <RepertoirePhase phase={repertoire} techData={phase.techData} onComplete={onComplete} showToast={showToast} todayKey={todayKey} plans={plans} />;
+  if (phase === "done") return <DoneScreen onBack={onBack} />;
+  return null;
+}
+
+function SetupPrompt({ phases, onStart, onBack }) {
+  return (
+    <div className="fade-in">
+      <button onClick={onBack} style={{ background: "none", color: "#6B6B7B", display: "flex", alignItems: "center", gap: 6, fontSize: 13, marginBottom: 24 }}>
+        <Icon d={icons.chevronLeft} size={16} /> Voltar
+      </button>
+      <h2 style={{ fontSize: 26, fontWeight: 300, marginBottom: 6 }}>Sua sessão de <em>hoje</em></h2>
+      <p style={{ color: "#6B6B7B", fontSize: 14, marginBottom: 28 }}>Confira a divisão e comece quando estiver pronto.</p>
+      {phases.map((p, i) => (
+        <div key={p.key} className="card" style={{ marginBottom: 12, borderColor: `${p.color}30`, background: `${p.bg}40` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: `${p.color}20`, border: `1px solid ${p.color}40`, display: "flex", alignItems: "center", justifyContent: "center", color: p.color, fontFamily: "'Space Mono',monospace", fontSize: 13, fontWeight: 700 }}>{i + 1}</div>
+              <div>
+                <div style={{ fontSize: 16 }}>{p.label}</div>
+                <div style={{ fontSize: 12, color: "#6B6B7B", fontFamily: "'Space Mono',monospace" }}>{p.pct}%</div>
+              </div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontFamily: "'Space Mono',monospace", fontSize: 18, color: p.color }}>{p.minutes}<span style={{ fontSize: 11 }}>min</span></div>
+            </div>
+          </div>
+        </div>
+      ))}
+      <button onClick={onStart} style={{ width: "100%", marginTop: 12, padding: 16, borderRadius: 16, background: "#F59E0B", color: "#000", fontSize: 16, fontWeight: 700, letterSpacing: .5 }}>
+        🎵 Começar Aquecimento
+      </button>
+    </div>
+  );
+}
+
+// ── WARMUP PHASE ──────────────────────────────────────────────────────────────
+function WarmupPhase({ phase, onDone }) {
+  const [secs, setSecs] = useState(phase.seconds);
+  const [running, setRunning] = useState(true);
+  const [finished, setFinished] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!running) return;
+    ref.current = setInterval(() => {
+      setSecs(s => {
+        if (s <= 1) { clearInterval(ref.current); setFinished(true); setRunning(false); return 0; }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(ref.current);
+  }, [running]);
+
+  const progress = 1 - secs / phase.seconds;
+  const r = 80, circ = 2 * Math.PI * r;
+
+  return (
+    <div className="fade-in" style={{ textAlign: "center" }}>
+      <div style={{ fontSize: 11, fontFamily: "'Space Mono',monospace", color: phase.color, letterSpacing: 3, textTransform: "uppercase", marginBottom: 8 }}>Fase 1</div>
+      <h2 style={{ fontSize: 28, fontWeight: 300, marginBottom: 40 }}>{phase.label}</h2>
+
+      {/* Circle timer */}
+      <div style={{ position: "relative", display: "inline-block", marginBottom: 36 }}>
+        <svg width={200} height={200}>
+          <circle cx={100} cy={100} r={r} fill="none" stroke="rgba(255,255,255,.06)" strokeWidth={8} />
+          <circle cx={100} cy={100} r={r} fill="none" stroke={phase.color} strokeWidth={8}
+            strokeDasharray={circ} strokeDashoffset={circ * (1 - progress)}
+            strokeLinecap="round" transform="rotate(-90 100 100)" style={{ transition: "stroke-dashoffset 1s linear" }} />
+        </svg>
+        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ fontFamily: "'Space Mono',monospace", fontSize: 36, fontWeight: 700, color: phase.color }}>{fmt(secs)}</div>
+          <div style={{ fontSize: 12, color: "#6B6B7B", marginTop: 4 }}>restante</div>
+        </div>
+      </div>
+
+      {finished ? (
+        <div>
+          <div style={{ fontSize: 24, marginBottom: 20 }}>🎉 Aquecimento concluído!</div>
+          <button onClick={onDone} style={{ width: "100%", padding: 16, borderRadius: 16, background: "#34D399", color: "#000", fontSize: 16, fontWeight: 700 }}>
+            Ir para Técnica →
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+          <button onClick={() => setRunning(r => !r)} style={{ padding: "12px 32px", borderRadius: 40, background: "rgba(255,255,255,.08)", color: "#E8E3DB", fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
+            <Icon d={running ? icons.pause : icons.play} size={18} />
+            {running ? "Pausar" : "Retomar"}
+          </button>
+          <button onClick={onDone} style={{ padding: "12px 20px", borderRadius: 40, background: "rgba(245,158,11,.15)", color: "#F59E0B", fontSize: 14 }}>
+            Pular →
+          </button>
+        </div>
+      )}
+
+      <div className="card" style={{ marginTop: 32, textAlign: "left" }}>
+        <div style={{ fontSize: 12, color: "#6B6B7B", marginBottom: 8, fontFamily: "'Space Mono',monospace" }}>SUGESTÕES DE AQUECIMENTO</div>
+        {["Alongamento dos dedos e pulsos", "Escalas lentas (♩= 60)", "Arpejos suaves", "Respiração e postura"].map(s => (
+          <div key={s} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,.05)", fontSize: 14, color: "#C4C0BA" }}>
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: phase.color, flexShrink: 0 }} />
+            {s}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── TECHNIQUE PHASE ───────────────────────────────────────────────────────────
+function TechniquePhase({ phase, onDone, showToast }) {
+  const [secs, setSecs] = useState(phase.seconds);
+  const [running, setRunning] = useState(false);
+  const [exercises, setExercises] = useState([]);
+  const [newEx, setNewEx] = useState("");
+  const [completedEx, setCompletedEx] = useState([]);
+  const [notes, setNotes] = useState("");
+  const ref = useRef(null);
+
+  function start() {
+    if (!running) setRunning(true);
+  }
+
+  useEffect(() => {
+    if (!running) return;
+    ref.current = setInterval(() => {
+      setSecs(s => { if (s <= 1) { clearInterval(ref.current); setRunning(false); showToast("⏰ Tempo de técnica finalizado!"); return 0; } return s - 1; });
+    }, 1000);
+    return () => clearInterval(ref.current);
+  }, [running]);
+
+  function addEx() {
+    if (!newEx.trim()) return;
+    setExercises(prev => [...prev, { id: Date.now(), name: newEx.trim() }]);
+    setNewEx("");
+  }
+
+  function toggleEx(id) {
+    setCompletedEx(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  }
+
+  const progress = 1 - secs / phase.seconds;
+
+  return (
+    <div className="fade-in">
+      <div style={{ fontSize: 11, fontFamily: "'Space Mono',monospace", color: phase.color, letterSpacing: 3, textTransform: "uppercase", marginBottom: 8 }}>Fase 2</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+        <h2 style={{ fontSize: 26, fontWeight: 300 }}>{phase.label}</h2>
+        <div style={{ fontFamily: "'Space Mono',monospace", fontSize: 24, color: phase.color }}>{fmt(secs)}</div>
+      </div>
+
+      {/* Progress bar */}
+      <div style={{ height: 4, background: "rgba(255,255,255,.08)", borderRadius: 2, marginBottom: 24, overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${progress * 100}%`, background: phase.color, transition: "width 1s linear", borderRadius: 2 }} />
+      </div>
+
+      {/* Add exercise */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 12, color: "#6B6B7B", fontFamily: "'Space Mono',monospace", marginBottom: 12 }}>EXERCÍCIOS DA SESSÃO</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <input value={newEx} onChange={e => setNewEx(e.target.value)} onKeyDown={e => e.key === "Enter" && addEx()} placeholder="Ex: Escalas maiores, Hanon nº5..." style={{ flex: 1, background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "10px 12px", color: "#E8E3DB", fontSize: 14 }} />
+          <button onClick={addEx} style={{ padding: "10px 16px", borderRadius: 8, background: phase.color, color: "#000", fontWeight: 700, display: "flex", alignItems: "center" }}>
+            <Icon d={icons.plus} size={18} stroke="#000" />
+          </button>
+        </div>
+        {exercises.length === 0 && <p style={{ fontSize: 13, color: "#6B6B7B", textAlign: "center", padding: "12px 0" }}>Adicione exercícios para acompanhar</p>}
+        {exercises.map(ex => (
+          <div key={ex.id} onClick={() => toggleEx(ex.id)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,.05)", cursor: "pointer" }}>
+            <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${completedEx.includes(ex.id) ? phase.color : "rgba(255,255,255,.2)"}`, background: completedEx.includes(ex.id) ? `${phase.color}30` : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .2s" }}>
+              {completedEx.includes(ex.id) && <Icon d={icons.check} size={12} stroke={phase.color} strokeWidth={3} />}
+            </div>
+            <span style={{ fontSize: 14, color: completedEx.includes(ex.id) ? "#6B6B7B" : "#E8E3DB", textDecoration: completedEx.includes(ex.id) ? "line-through" : "none" }}>{ex.name}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Notes */}
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 12, color: "#6B6B7B", fontFamily: "'Space Mono',monospace", marginBottom: 8 }}>OBSERVAÇÕES</div>
+        <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Dificuldades encontradas, pontos a melhorar..." style={{ width: "100%", minHeight: 80, background: "transparent", border: "none", color: "#E8E3DB", fontSize: 14, resize: "none", lineHeight: 1.6 }} />
+      </div>
+
+      <div style={{ display: "flex", gap: 10 }}>
+        {!running ? (
+          <button onClick={start} style={{ flex: 1, padding: 14, borderRadius: 12, background: phase.color, color: "#000", fontWeight: 700, fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            <Icon d={icons.play} size={18} fill="#000" stroke="#000" /> Iniciar Cronômetro
+          </button>
+        ) : (
+          <button onClick={() => setRunning(false)} style={{ flex: 1, padding: 14, borderRadius: 12, background: "rgba(255,255,255,.08)", color: "#E8E3DB", fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            <Icon d={icons.pause} size={18} /> Pausar
+          </button>
+        )}
+        <button onClick={() => onDone({ exercises: exercises.map(e => ({ ...e, done: completedEx.includes(e.id) })), notes })} style={{ padding: "14px 20px", borderRadius: 12, background: "rgba(52,211,153,.15)", color: "#34D399", fontSize: 14 }}>
+          Avançar →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── REPERTOIRE PHASE ──────────────────────────────────────────────────────────
+function RepertoirePhase({ phase, techData, onComplete, showToast, todayKey, plans }) {
+  const [secs, setSecs] = useState(phase.seconds);
+  const [running, setRunning] = useState(false);
+  const [pieces, setPieces] = useState([{ id: 1, name: "", fromBar: "", toBar: "", toImprove: "" }]);
+  const ref = useRef(null);
+  const todayPlan = plans[todayKey];
+
+  useEffect(() => {
+    if (!running) return;
+    ref.current = setInterval(() => {
+      setSecs(s => { if (s <= 1) { clearInterval(ref.current); setRunning(false); showToast("⏰ Tempo de repertório finalizado!"); return 0; } return s - 1; });
+    }, 1000);
+    return () => clearInterval(ref.current);
+  }, [running]);
+
+  function addPiece() { setPieces(prev => [...prev, { id: Date.now(), name: "", fromBar: "", toBar: "", toImprove: "" }]); }
+  function updatePiece(id, field, val) { setPieces(prev => prev.map(p => p.id === id ? { ...p, [field]: val } : p)); }
+  function removePiece(id) { setPieces(prev => prev.filter(p => p.id !== id)); }
+
+  function handleRegister() {
+    const validPieces = pieces.filter(p => p.name.trim());
+    if (!validPieces.length) { showToast("Adicione pelo menos uma peça", "error"); return; }
+    onComplete({ techData, repertoire: validPieces, totalSecs: phase.seconds - secs });
+  }
+
+  const progress = 1 - secs / phase.seconds;
+
+  return (
+    <div className="fade-in">
+      <div style={{ fontSize: 11, fontFamily: "'Space Mono',monospace", color: phase.color, letterSpacing: 3, textTransform: "uppercase", marginBottom: 8 }}>Fase 3</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <h2 style={{ fontSize: 26, fontWeight: 300 }}>{phase.label}</h2>
+        <div style={{ fontFamily: "'Space Mono',monospace", fontSize: 24, color: phase.color }}>{fmt(secs)}</div>
+      </div>
+      <div style={{ height: 4, background: "rgba(255,255,255,.08)", borderRadius: 2, marginBottom: 20, overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${progress * 100}%`, background: phase.color, transition: "width 1s linear", borderRadius: 2 }} />
+      </div>
+
+      {/* Timer controls */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+        <button onClick={() => setRunning(r => !r)} style={{ padding: "10px 20px", borderRadius: 30, background: running ? "rgba(255,255,255,.08)" : phase.color, color: running ? "#E8E3DB" : "#000", fontSize: 13, display: "flex", alignItems: "center", gap: 6, fontWeight: running ? 400 : 700 }}>
+          <Icon d={running ? icons.pause : icons.play} size={16} stroke={running ? "currentColor" : "#000"} fill={!running ? "#000" : "none"} />
+          {running ? "Pausar" : "Iniciar"}
+        </button>
+      </div>
+
+      {/* Today's plan reminder */}
+      {todayPlan && (
+        <div className="card" style={{ marginBottom: 16, borderColor: `${phase.color}30`, background: `rgba(129,140,248,.08)` }}>
+          <div style={{ fontSize: 11, color: phase.color, fontFamily: "'Space Mono',monospace", marginBottom: 4 }}>PLANO DE HOJE</div>
+          <p style={{ fontSize: 14, color: "#C4C0BA" }}>{todayPlan.note}</p>
+        </div>
+      )}
+
+      {/* Pieces */}
+      {pieces.map((piece, i) => (
+        <div key={piece.id} className="card" style={{ marginBottom: 12, borderColor: `${phase.color}20` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <span style={{ fontSize: 12, fontFamily: "'Space Mono',monospace", color: phase.color }}>PEÇA {i + 1}</span>
+            {pieces.length > 1 && <button onClick={() => removePiece(piece.id)} style={{ background: "none", color: "#EF4444", display: "flex" }}><Icon d={icons.trash} size={15} /></button>}
+          </div>
+          <input value={piece.name} onChange={e => updatePiece(piece.id, "name", e.target.value)} placeholder="Nome da peça / obra" style={{ width: "100%", background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "8px 12px", color: "#E8E3DB", fontSize: 14, marginBottom: 10 }} />
+          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            <input value={piece.fromBar} onChange={e => updatePiece(piece.id, "fromBar", e.target.value)} placeholder="Do compasso" style={{ flex: 1, background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "8px 12px", color: "#E8E3DB", fontSize: 14 }} />
+            <input value={piece.toBar} onChange={e => updatePiece(piece.id, "toBar", e.target.value)} placeholder="Ao compasso" style={{ flex: 1, background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "8px 12px", color: "#E8E3DB", fontSize: 14 }} />
+          </div>
+          <textarea value={piece.toImprove} onChange={e => updatePiece(piece.id, "toImprove", e.target.value)} placeholder="O que precisa melhorar neste trecho..." style={{ width: "100%", background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 8, padding: "8px 12px", color: "#E8E3DB", fontSize: 14, minHeight: 70, resize: "none" }} />
+        </div>
+      ))}
+
+      <button onClick={addPiece} style={{ width: "100%", padding: "10px", borderRadius: 10, background: "rgba(255,255,255,.04)", border: "1px dashed rgba(255,255,255,.15)", color: "#9CA3AF", fontSize: 14, marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+        <Icon d={icons.plus} size={16} /> Adicionar peça
+      </button>
+
+      <button onClick={handleRegister} style={{ width: "100%", padding: 16, borderRadius: 16, background: `linear-gradient(135deg, ${phase.color}, #6366F1)`, color: "#fff", fontSize: 16, fontWeight: 700, letterSpacing: .5, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+        <Icon d={icons.save} size={18} stroke="#fff" /> Registrar Sessão
+      </button>
+    </div>
+  );
+}
+
+// ── DONE SCREEN ───────────────────────────────────────────────────────────────
+function DoneScreen({ onBack }) {
+  return (
+    <div className="fade-in" style={{ textAlign: "center", paddingTop: 60 }}>
+      <div style={{ fontSize: 72, marginBottom: 20 }}>🎵</div>
+      <h2 style={{ fontSize: 32, fontWeight: 300, marginBottom: 12 }}>Sessão <em>completa!</em></h2>
+      <p style={{ color: "#9CA3AF", fontSize: 16, marginBottom: 40 }}>Excelente trabalho. Continue assim.</p>
+      <button onClick={onBack} style={{ padding: "14px 32px", borderRadius: 40, background: "#F59E0B", color: "#000", fontSize: 15, fontWeight: 700 }}>
+        Voltar ao início
+      </button>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CALENDAR TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+function CalendarTab({ plans, setPlans, calDate, setCalDate, showToast, log, streak }) {
+  const [selectedDay, setSelectedDay] = useState(null);
+  const [editNote, setEditNote] = useState("");
+  const [editGoal, setEditGoal] = useState("");
+  const [showModal, setShowModal] = useState(false);
+
+  const year = calDate.getFullYear(), month = calDate.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const offset = firstDay === 0 ? 6 : firstDay - 1;
+
+  function openDay(d) {
+    const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    setSelectedDay(key);
+    setEditNote(plans[key]?.note || "");
+    setEditGoal(plans[key]?.goal || "");
+    setShowModal(true);
+  }
+
+  function savePlan() {
+    if (!editNote.trim() && !editGoal.trim()) { setShowModal(false); return; }
+    setPlans(prev => ({ ...prev, [selectedDay]: { note: editNote, goal: editGoal, ts: Date.now() } }));
+    showToast("Plano salvo!");
+    setShowModal(false);
+  }
+
+  function exportToGoogle() {
+    if (!selectedDay || !plans[selectedDay]) return;
+    const plan = plans[selectedDay];
+    const title = encodeURIComponent(`🎵 Estudo: ${plan.goal || plan.note.slice(0, 40)}`);
+    const details = encodeURIComponent(plan.note);
+    const date = selectedDay.replace(/-/g, "");
+    const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&dates=${date}/${date}`;
+    window.open(url, "_blank");
+    showToast("Abrindo Google Calendar...");
+  }
+
+  return (
+    <div className="fade-in">
+      {/* Modal */}
+      {showModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.8)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={() => setShowModal(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "#141418", borderRadius: "20px 20px 0 0", padding: 24, width: "100%", maxWidth: 480, borderTop: "1px solid rgba(255,255,255,.1)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <div>
+                <div style={{ fontSize: 11, color: "#6B6B7B", fontFamily: "'Space Mono',monospace" }}>PLANO</div>
+                <div style={{ fontSize: 18 }}>{selectedDay && new Date(selectedDay + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}</div>
+              </div>
+              <button onClick={() => setShowModal(false)} style={{ background: "rgba(255,255,255,.08)", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF" }}>
+                <Icon d={icons.x} size={16} />
+              </button>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 12, color: "#6B6B7B", fontFamily: "'Space Mono',monospace", display: "block", marginBottom: 6 }}>OBJETIVO DA SESSÃO</label>
+              <input value={editGoal} onChange={e => setEditGoal(e.target.value)} placeholder="Ex: Preparar para recital de Junho..." style={{ width: "100%", background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 10, padding: "10px 14px", color: "#E8E3DB", fontSize: 14 }} />
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: 12, color: "#6B6B7B", fontFamily: "'Space Mono',monospace", display: "block", marginBottom: 6 }}>O QUE ESTUDAR</label>
+              <textarea value={editNote} onChange={e => setEditNote(e.target.value)} placeholder="Repertório, exercícios específicos, metas do dia..." style={{ width: "100%", minHeight: 100, background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 10, padding: "10px 14px", color: "#E8E3DB", fontSize: 14, resize: "none" }} />
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={savePlan} style={{ flex: 1, padding: 13, borderRadius: 12, background: "#818CF8", color: "#fff", fontSize: 14, fontWeight: 700 }}>
+                Salvar Plano
+              </button>
+              <button onClick={exportToGoogle} style={{ padding: "13px 16px", borderRadius: 12, background: "rgba(255,255,255,.06)", color: "#9CA3AF", fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}>
+                <Icon d={icons.link} size={15} /> Google
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+        <h2 style={{ fontSize: 24, fontWeight: 300 }}>Agenda</h2>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button onClick={() => setCalDate(new Date(year, month - 1, 1))} style={{ background: "rgba(255,255,255,.08)", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", color: "#E8E3DB" }}>
+            <Icon d={icons.chevronLeft} size={16} />
+          </button>
+          <span style={{ fontFamily: "'Space Mono',monospace", fontSize: 13, minWidth: 130, textAlign: "center" }}>{MONTHS[month]} {year}</span>
+          <button onClick={() => setCalDate(new Date(year, month + 1, 1))} style={{ background: "rgba(255,255,255,.08)", borderRadius: "50%", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", color: "#E8E3DB" }}>
+            <Icon d={icons.chevronRight} size={16} />
+          </button>
+        </div>
+      </div>
+
+      {/* Day headers */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4, marginBottom: 8 }}>
+        {["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"].map(d => (
+          <div key={d} style={{ textAlign: "center", fontSize: 10, fontFamily: "'Space Mono',monospace", color: "#6B6B7B", padding: "4px 0" }}>{d}</div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4, marginBottom: 28 }}>
+        {Array.from({ length: offset }, (_, i) => <div key={`e${i}`} />)}
+        {Array.from({ length: daysInMonth }, (_, i) => {
+          const d = i + 1;
+          const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+          const hasPlan = !!plans[key];
+          const hasLog = !!log[key];
+          const isToday = key === today();
+          return (
+            <button key={d} onClick={() => openDay(d)} style={{ aspectRatio: 1, borderRadius: 10, background: isToday ? "rgba(245,158,11,.2)" : hasPlan ? "rgba(129,140,248,.12)" : "rgba(255,255,255,.04)", border: isToday ? "1.5px solid #F59E0B" : hasPlan ? "1px solid rgba(129,140,248,.3)" : "1px solid rgba(255,255,255,.06)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, cursor: "pointer", position: "relative" }}>
+              <span style={{ fontSize: 13, fontFamily: "'Space Mono',monospace", color: isToday ? "#F59E0B" : "#E8E3DB" }}>{d}</span>
+              <div style={{ display: "flex", gap: 2 }}>
+                {hasPlan && <div style={{ width: 4, height: 4, borderRadius: "50%", background: "#818CF8" }} />}
+                {hasLog && <div style={{ width: 4, height: 4, borderRadius: "50%", background: "#34D399" }} />}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div style={{ display: "flex", gap: 16, fontSize: 12, color: "#6B6B7B", marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}><div style={{ width: 8, height: 8, borderRadius: "50%", background: "#818CF8" }} /> Planejado</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}><div style={{ width: 8, height: 8, borderRadius: "50%", background: "#34D399" }} /> Estudado</div>
+      </div>
+
+      {/* Upcoming plans */}
+      <div style={{ fontSize: 13, color: "#6B6B7B", fontFamily: "'Space Mono',monospace", marginBottom: 12, letterSpacing: 1, textTransform: "uppercase" }}>Próximas sessões planejadas</div>
+      {Object.entries(plans).filter(([k]) => k >= today()).sort(([a], [b]) => a.localeCompare(b)).slice(0, 5).map(([k, v]) => (
+        <div key={k} className="card" style={{ marginBottom: 10, borderColor: "rgba(129,140,248,.2)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div>
+              <div style={{ fontSize: 11, color: "#818CF8", fontFamily: "'Space Mono',monospace", marginBottom: 4 }}>{new Date(k + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "short", day: "numeric", month: "short" }).toUpperCase()}</div>
+              {v.goal && <div style={{ fontSize: 14, marginBottom: 4 }}>{v.goal}</div>}
+              <div style={{ fontSize: 13, color: "#9CA3AF" }}>{v.note}</div>
+            </div>
+            <button onClick={() => { setSelectedDay(k); setEditNote(v.note); setEditGoal(v.goal || ""); setShowModal(true); }} style={{ background: "none", color: "#6B6B7B", marginLeft: 8 }}>
+              <Icon d={icons.edit} size={15} />
+            </button>
+          </div>
+        </div>
+      ))}
+      {Object.keys(plans).filter(k => k >= today()).length === 0 && (
+        <p style={{ fontSize: 14, color: "#6B6B7B", textAlign: "center", padding: "20px 0" }}>Toque em um dia para planejar sua sessão</p>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HISTORY TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+function HistoryTab({ log, streak }) {
+  const entries = Object.entries(log).sort(([a], [b]) => b.localeCompare(a));
+  const totalSessions = entries.length;
+  const thisWeek = entries.filter(([k]) => { const d = new Date(k); return (new Date() - d) < 7 * 864e5; }).length;
+  const thisMonth = entries.filter(([k]) => { const d = new Date(k); const n = new Date(); return d.getMonth() === n.getMonth() && d.getFullYear() === n.getFullYear(); }).length;
+
+  return (
+    <div className="fade-in">
+      <h2 style={{ fontSize: 24, fontWeight: 300, marginBottom: 24 }}>Histórico</h2>
+
+      {/* Stats */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 24 }}>
+        {[
+          { label: "Esta semana", val: thisWeek, color: "#F59E0B" },
+          { label: "Este mês", val: thisMonth, color: "#34D399" },
+          { label: "Total", val: totalSessions, color: "#818CF8" },
+        ].map(s => (
+          <div key={s.label} className="card" style={{ textAlign: "center", borderColor: `${s.color}20` }}>
+            <div style={{ fontFamily: "'Space Mono',monospace", fontSize: 28, color: s.color }}>{s.val}</div>
+            <div style={{ fontSize: 11, color: "#6B6B7B", marginTop: 4 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Sessions */}
+      {entries.length === 0 && (
+        <div style={{ textAlign: "center", padding: "60px 0", color: "#6B6B7B" }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>📖</div>
+          <p>Nenhuma sessão registrada ainda.</p>
+          <p style={{ fontSize: 13, marginTop: 8 }}>Complete sua primeira sessão!</p>
+        </div>
+      )}
+      {entries.map(([key, session]) => (
+        <div key={key} className="card" style={{ marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 13, fontFamily: "'Space Mono',monospace", color: "#F59E0B" }}>
+                {new Date(key + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}
+              </div>
+            </div>
+            <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#34D399", marginTop: 4, boxShadow: "0 0 6px #34D399" }} />
+          </div>
+
+          {/* Repertoire */}
+          {session.repertoire?.map((r, i) => (
+            <div key={i} style={{ background: "rgba(255,255,255,.03)", borderRadius: 10, padding: "10px 12px", marginBottom: 8, borderLeft: `3px solid #818CF8` }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{r.name || "—"}</div>
+              {(r.fromBar || r.toBar) && <div style={{ fontSize: 12, color: "#9CA3AF", fontFamily: "'Space Mono',monospace", marginBottom: 4 }}>Compassos {r.fromBar}–{r.toBar}</div>}
+              {r.toImprove && <div style={{ fontSize: 13, color: "#C4C0BA" }}>↳ {r.toImprove}</div>}
+            </div>
+          ))}
+
+          {/* Technique exercises */}
+          {session.techData?.exercises?.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 11, color: "#6B6B7B", fontFamily: "'Space Mono',monospace", marginBottom: 6 }}>EXERCÍCIOS</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {session.techData.exercises.map((e, i) => (
+                  <span key={i} style={{ fontSize: 12, padding: "4px 10px", borderRadius: 20, background: e.done ? "rgba(52,211,153,.15)" : "rgba(255,255,255,.06)", color: e.done ? "#34D399" : "#9CA3AF", border: `1px solid ${e.done ? "rgba(52,211,153,.3)" : "rgba(255,255,255,.08)"}` }}>
+                    {e.done ? "✓ " : ""}{e.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {session.techData?.notes && (
+            <div style={{ marginTop: 10, fontSize: 13, color: "#9CA3AF", fontStyle: "italic", paddingTop: 10, borderTop: "1px solid rgba(255,255,255,.06)" }}>
+              {session.techData.notes}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PRIVACY TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+function PrivacyTab() {
+  const sections = [
+    {
+      icon: icons.info,
+      color: "#818CF8",
+      title: "1. Informações Gerais",
+      content: `O aplicativo Maestro — Diário de Estudos Musical ("Aplicativo") é desenvolvido de forma independente para uso pessoal por estudantes de música. Esta Política de Privacidade descreve como coletamos, usamos, armazenamos e protegemos os seus dados, em conformidade com a Lei Geral de Proteção de Dados Pessoais (LGPD — Lei nº 13.709/2018).
+
+Ao utilizar este Aplicativo, você concorda com as práticas descritas nesta política. Recomendamos a leitura atenta deste documento.`
+    },
+    {
+      icon: icons.user,
+      color: "#34D399",
+      title: "2. Dados Coletados",
+      content: `O Aplicativo coleta apenas os dados inseridos voluntariamente por você durante o uso, incluindo:
+
+• Registros de sessões de estudo (data, duração, exercícios realizados, repertório trabalhado e observações pessoais);
+• Planejamento de estudos (objetivos, metas e notas inseridas na agenda);
+• Configurações personalizadas (porcentagens de tempo por etapa de estudo);
+• Dados de sequência de prática (streak semanal).
+
+Todos esses dados são armazenados exclusivamente no dispositivo do usuário (armazenamento local — localStorage), não sendo transmitidos a servidores externos.`
+    },
+    {
+      icon: icons.lock,
+      color: "#F59E0B",
+      title: "3. Finalidade do Tratamento",
+      content: `Os dados coletados têm como única finalidade o funcionamento do próprio Aplicativo, especificamente para:
+
+• Exibir o histórico de sessões de estudo ao usuário;
+• Calcular e apresentar métricas de desempenho (frequência semanal, total de sessões);
+• Salvar planos de estudo e objetivos para consulta futura;
+• Permitir a exportação voluntária de planos ao Google Calendar, quando acionada pelo usuário.
+
+Não realizamos qualquer forma de tratamento de dados para fins comerciais, publicitários ou de perfilamento.`
+    },
+    {
+      icon: icons.shield,
+      color: "#F87171",
+      title: "4. Compartilhamento de Dados",
+      content: `Os seus dados não são compartilhados com terceiros, exceto nas seguintes situações opcionais e controladas pelo próprio usuário:
+
+• Exportação para o Google Calendar: ao clicar em "Google" na aba de Agenda, os dados do plano de estudo selecionado são enviados diretamente ao serviço do Google por meio de uma URL pública. Esta funcionalidade é totalmente opcional e iniciada pelo usuário. O uso dos dados pelo Google é regido pela Política de Privacidade do Google (policies.google.com).
+
+Nenhum outro compartilhamento, venda ou cessão de dados é realizado.`
+    },
+    {
+      icon: icons.eye,
+      color: "#A78BFA",
+      title: "5. Armazenamento e Segurança",
+      content: `Todos os dados são armazenados localmente no seu dispositivo por meio da tecnologia localStorage do navegador. Isso significa que:
+
+• Os dados ficam restritos ao dispositivo e navegador em que o Aplicativo é utilizado;
+• Não há transmissão ou sincronização com servidores externos;
+• Os dados podem ser removidos a qualquer momento ao limpar os dados de navegação ou o cache do navegador/aplicativo;
+• A segurança dos dados depende também das medidas de segurança do próprio dispositivo do usuário (senha, biometria, etc.).
+
+Recomendamos manter o dispositivo protegido para garantir a privacidade das suas informações.`
+    },
+    {
+      icon: icons.star,
+      color: "#34D399",
+      title: "6. Direitos do Titular",
+      content: `Em conformidade com a LGPD, você possui os seguintes direitos sobre seus dados pessoais:
+
+• Acesso: visualizar todos os seus dados registrados na aba "Histórico" do Aplicativo;
+• Correção: editar ou atualizar qualquer informação diretamente pelo Aplicativo;
+• Eliminação: excluir seus dados a qualquer momento limpando o armazenamento local do navegador;
+• Portabilidade: seus dados ficam em formato JSON no localStorage, podendo ser exportados manualmente;
+• Revogação do consentimento: basta deixar de utilizar o Aplicativo e limpar os dados locais.
+
+Como não há coleta em servidores externos, todos os direitos acima são exercidos diretamente no seu dispositivo.`
+    },
+    {
+      icon: icons.bell,
+      color: "#F59E0B",
+      title: "7. Cookies e Tecnologias Similares",
+      content: `O Aplicativo utiliza o localStorage do navegador — tecnologia similar a cookies — exclusivamente para salvar suas preferências e dados de estudo entre sessões. Não utilizamos cookies de rastreamento, publicidade ou análise de comportamento de terceiros.`
+    },
+    {
+      icon: icons.info,
+      color: "#818CF8",
+      title: "8. Menores de Idade",
+      content: `O Aplicativo pode ser utilizado por pessoas de qualquer idade, incluindo menores de 18 anos. Para usuários menores, recomendamos o uso sob supervisão de um responsável legal, em conformidade com o artigo 14 da LGPD, que estabelece proteção especial aos dados pessoais de crianças e adolescentes.
+
+Não coletamos intencionalmente dados que permitam identificar menores de idade.`
+    },
+    {
+      icon: icons.edit,
+      color: "#34D399",
+      title: "9. Alterações nesta Política",
+      content: `Esta Política de Privacidade pode ser atualizada periodicamente para refletir melhorias no Aplicativo ou mudanças na legislação aplicável. Recomendamos a consulta periódica desta página. A data da última atualização é indicada ao final deste documento.
+
+O uso continuado do Aplicativo após alterações nesta política implica a aceitação das novas condições.`
+    },
+    {
+      icon: icons.mail,
+      color: "#F87171",
+      title: "10. Contato",
+      content: `Em caso de dúvidas, solicitações relacionadas aos seus dados ou para o exercício dos seus direitos previstos na LGPD, entre em contato pelo e-mail disponibilizado pelo desenvolvedor do Aplicativo.
+
+Como responsável pelo Aplicativo, comprometemo-nos a responder às solicitações em prazo razoável, conforme os prazos estabelecidos pela legislação vigente.`
+    },
+  ];
+
+  const [expanded, setExpanded] = useState(null);
+
+  return (
+    <div className="fade-in">
+      {/* Header */}
+      <div style={{ marginBottom: 28 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 14, background: "rgba(129,140,248,.15)", border: "1px solid rgba(129,140,248,.3)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Icon d={icons.shield} size={22} stroke="#818CF8" />
+          </div>
+          <div>
+            <h2 style={{ fontSize: 22, fontWeight: 300 }}>Política de <em>Privacidade</em></h2>
+            <div style={{ fontSize: 11, fontFamily: "'Space Mono',monospace", color: "#6B6B7B", marginTop: 2 }}>LGPD · Lei nº 13.709/2018</div>
+          </div>
+        </div>
+        <div style={{ background: "rgba(129,140,248,.08)", border: "1px solid rgba(129,140,248,.2)", borderRadius: 12, padding: "12px 16px" }}>
+          <p style={{ fontSize: 13, color: "#C4C0BA", lineHeight: 1.7 }}>
+            O Maestro respeita e protege a sua privacidade. Seus dados de estudo são armazenados <strong style={{ color: "#818CF8" }}>exclusivamente no seu dispositivo</strong> e nunca são compartilhados sem sua autorização.
+          </p>
+        </div>
+      </div>
+
+      {/* Sections accordion */}
+      {sections.map((sec, i) => (
+        <div key={i} style={{ marginBottom: 8, borderRadius: 14, border: `1px solid ${expanded === i ? sec.color + "30" : "rgba(255,255,255,.07)"}`, overflow: "hidden", transition: "border-color .2s" }}>
+          <button
+            onClick={() => setExpanded(expanded === i ? null : i)}
+            style={{ width: "100%", background: expanded === i ? `${sec.color}08` : "rgba(255,255,255,.02)", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, textAlign: "left", transition: "background .2s" }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 10, background: `${sec.color}15`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <Icon d={sec.icon} size={16} stroke={sec.color} />
+              </div>
+              <span style={{ fontSize: 14, color: expanded === i ? sec.color : "#E8E3DB", fontWeight: expanded === i ? 600 : 400, transition: "color .2s" }}>{sec.title}</span>
+            </div>
+            <div style={{ flexShrink: 0, transition: "transform .2s", transform: expanded === i ? "rotate(90deg)" : "rotate(0deg)" }}>
+              <Icon d={icons.chevronRight} size={16} stroke="#6B6B7B" />
+            </div>
+          </button>
+          {expanded === i && (
+            <div className="fade-in" style={{ padding: "0 16px 16px", borderTop: `1px solid ${sec.color}15` }}>
+              <p style={{ fontSize: 14, color: "#B8B4AE", lineHeight: 1.85, marginTop: 14, whiteSpace: "pre-line" }}>{sec.content}</p>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {/* Footer */}
+      <div style={{ marginTop: 24, padding: "16px", borderRadius: 12, background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", textAlign: "center" }}>
+        <div style={{ fontSize: 11, fontFamily: "'Space Mono',monospace", color: "#6B6B7B", lineHeight: 1.8 }}>
+          <div>Maestro — Diário de Estudos Musical</div>
+          <div style={{ marginTop: 4 }}>Última atualização: {new Date().toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" })}</div>
+          <div style={{ marginTop: 4, color: "#4B4B5B" }}>Em conformidade com a LGPD — Lei nº 13.709/2018</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<MusicDiary />);
+  </script>
+</body>
+</html>
